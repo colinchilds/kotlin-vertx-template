@@ -28,7 +28,7 @@ repositories {
 
 
 
-group = "dev.cchilds.kvpr"
+group = "dev.cchilds.kotlin-vertx-template"
 version = "1.0-SNAPSHOT"
 
 
@@ -78,7 +78,7 @@ tasks {
     }
 
     withType<ShadowJar> {
-        baseName = "kvpr"
+        baseName = "kvt"
         classifier = null
         version = null
     }

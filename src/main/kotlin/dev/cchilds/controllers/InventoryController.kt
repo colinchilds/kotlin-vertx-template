@@ -1,6 +1,7 @@
 package dev.cchilds.controllers
 
 import dev.cchilds.annotations.Body
+import dev.cchilds.json.jObj
 import dev.cchilds.repositories.InventoryRepo
 import io.reactivex.Single
 import io.vertx.core.json.JsonObject
@@ -16,6 +17,6 @@ class InventoryController(val inventoryRepo: InventoryRepo) : BaseController() {
     }
 
     fun post(@Body body:JsonObject): JsonObject {
-        return JsonObject(mapOf("body" to body))
+        return jObj(mapOf("body" to body))
     }
 }
