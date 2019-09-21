@@ -31,49 +31,69 @@ import kotlin.reflect.full.instanceParameter
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.jvm.jvmErasure
 
-object SwaggerRouter: KoinComponent {
+private typealias RequiredRoles = Map<String, List<String>>
+
+fun Router.route(swaggerFile: OpenAPI, controllerPackage: String) {
+    route()
+        .produces("application/json")
+        .handler(BodyHandler.create().setBodyLimit(5120000))
+        .handler(TimeoutHandler.create(30000))
+
+    SwaggerRouter.addRoutesFromSwaggerFile(this, swaggerFile, controllerPackage)
+}
+
+object SwaggerRouter : KoinComponent {
 
     private val jwtHelper: JWTHelper by inject()
 
-    fun route(router: Router, swaggerFile: OpenAPI, controllerPackage: String) {
-        router.route()
-            .produces("application/json")
-            .handler(BodyHandler.create().setBodyLimit(5120000))
-            .handler(TimeoutHandler.create(30000))
-
-        addRoutesFromSwaggerFile(router, swaggerFile, controllerPackage)
-    }
-
-    private fun addRoutesFromSwaggerFile(router: Router, swaggerFile: OpenAPI, controllerPackage: String) {
+    @Suppress("UNCHECKED_CAST")
+    fun addRoutesFromSwaggerFile(
+        router: Router,
+        swaggerFile: OpenAPI,
+        controllerPackage: String
+    ) {
         val swaggerCache = ResolverCache(swaggerFile, null, null)
 
         val controllerInstances = mutableMapOf<String, Any>()
-        swaggerFile.paths.forEach{ (path, pathItem) ->
+        swaggerFile.paths.forEach { (path, pathItem) ->
             val convertedPath = path.replace('{', ':').replace("}", "")
             pathItem.readOperationsMap().forEach { (verb, op) ->
                 val opId = op.operationId ?: ""
                 val split = opId.split('.')
                 if (split.size < 2)
-                    throw RuntimeException("Unable to parse operation $opId for path $path")
+                    throw RuntimeException(
+                        "Unable to parse operation $opId for path $path")
                 val controllerName = split[0]
                 val methodName = split[1]
-                val roles = op.extensions?.get("x-auth-roles") as? Map<String, List<String>>
+                val roles = op.extensions
+                    ?.get("x-auth-roles") as? Map<String, List<String>>
 
                 val controller = controllerInstances.getOrElse(controllerName, {
-                    val kclass = Class.forName("${controllerPackage}.$controllerName").kotlin
+                    val kclass = Class
+                        .forName("${controllerPackage}.$controllerName")
+                        .kotlin
                     val inst = get().koin.get<Any>(kclass, null, null)
                     controllerInstances[controllerName] = inst
                     inst
                 })
 
                 val method = controller::class.members.find { it.name == methodName }
-                    ?: throw RuntimeException("Method $methodName not found for controller $controllerName")
+                    ?: throw RuntimeException(
+                        "Method $methodName not found for controller $controllerName")
 
                 val route = router.route(HttpMethod.valueOf(verb.name), convertedPath)
                 if (roles?.isNotEmpty() == true)
                     route.handler(JWTAuthHandler.create(jwtHelper.authProvider))
-                route.handler(OpenAPI3RequestValidationHandler(
-                    OpenAPI3RequestValidationHandlerImpl(op, op.parameters, swaggerFile, swaggerCache)))
+                route.handler(
+                    OpenAPI3RequestValidationHandler(
+                        OpenAPI3RequestValidationHandlerImpl(
+                            op,
+                            op.parameters,
+                            swaggerFile,
+                            swaggerCache
+                        )
+                    )
+                )
                 route.handler { context ->
                     if (roles?.isNotEmpty() == true)
                         authenticateUser(
@@ -86,30 +106,52 @@ object SwaggerRouter: KoinComponent {
         }
     }
 
-    private fun authenticateUser(requiredRoles: Map<String, List<String>>, userRoles: JsonArray) {
-        if ((requiredRoles["oneOf"] != null && !userRoles.oneOf(JsonArray(requiredRoles["oneOf"]))) ||
-            (requiredRoles["anyOf"] != null && !userRoles.anyOf(JsonArray(requiredRoles["anyOf"]))) ||
-            (requiredRoles["allOf"] != null && !userRoles.allOf(JsonArray(requiredRoles["allOf"]))))
-            throw AuthorizationException()
-    }
-
-    private fun replyWithError(context: RoutingContext, failure: Throwable) {
-        var response = context.response()
-        if (failure is ResponseCodeException) {
-            response.putHeader("content-type", "application/json")
-            response.setStatusCode(failure.statusCode.value()).end(failure.asJson().encode())
-        } else if (context.statusCode() <= 0) {
-            response.setStatusCode(HTTPStatusCode.INTERNAL_ERROR.value()).end(failure?.message ?: "")
-        } else {
-            response.setStatusCode(context.statusCode()).end(failure?.message ?: "")
+    private fun authenticateUser(
+        requiredRoles: RequiredRoles,
+        userRoles: JsonArray
+    ) {
+        with (requiredRoles) {
+            if ((taggedWith("oneOf") && !userRoles.oneOf(rolesIn("oneOf"))) ||
+                (taggedWith("anyOf") && !userRoles.anyOf(rolesIn("anyOf"))) ||
+                (taggedWith("allOf") && !userRoles.allOf(rolesIn("allOf")))
+            )
+                throw AuthorizationException()
         }
     }
 
-    private fun KCallable<*>.callWithParams(instance: Any?, context: RoutingContext, swaggerParams: List<Parameter>?) {
+    private fun RequiredRoles.taggedWith(tag: String): Boolean =
+        this[tag] != null
+
+    private fun RequiredRoles.rolesIn(tag: String): JsonArray =
+        JsonArray(this[tag])
+
+    private fun replyWithError(context: RoutingContext, failure: Throwable) {
+        val response = context.response()
+        if (failure is ResponseCodeException) {
+            response.putHeader("content-type", "application/json")
+            response
+                .setStatusCode(failure.statusCode.value())
+                .end(failure.asJson().encode())
+        } else if (context.statusCode() <= 0) {
+            response
+                .setStatusCode(HTTPStatusCode.INTERNAL_ERROR.value())
+                .end(failure.message ?: "")
+        } else {
+            response
+                .setStatusCode(context.statusCode())
+                .end(failure.message ?: "")
+        }
+    }
+
+    private fun KCallable<*>.callWithParams(
+        instance: Any?,
+        context: RoutingContext,
+        swaggerParams: List<Parameter>?
+    ) {
         try {
             val params: MutableMap<KParameter, Any?> = mutableMapOf()
             this.instanceParameter?.let { params.put(it, instance) }
-            this.parameters.forEach {param ->
+            this.parameters.forEach { param ->
                 if (param.isSubclassOf(RoutingContext::class)) {
                     params[param] = context
                 } else if (param.findAnnotation<Body>() != null) {
@@ -155,7 +197,7 @@ object SwaggerRouter: KoinComponent {
         }
     }
 
-    private fun parseParam(param:KParameter, value: String): Any {
+    private fun parseParam(param: KParameter, value: String): Any {
         return if (param.isSubclassOf(Int::class))
             value.toInt()
         else if (param.isSubclassOf(Boolean::class))
@@ -180,7 +222,7 @@ object SwaggerRouter: KoinComponent {
         }
     }
 
-    private fun ClusterSerializable.encode():String {
+    private fun ClusterSerializable.encode(): String {
         return when (this) {
             is JsonObject -> this.encode()
             is JsonArray -> this.encode()
@@ -188,9 +230,11 @@ object SwaggerRouter: KoinComponent {
         }
     }
 
-    private inline fun <reified T : Annotation> KAnnotatedElement.findAnnotation() = this.annotations.find { it is T } as? T
+    private inline fun <reified T : Annotation> KAnnotatedElement.findAnnotation() =
+        annotations.find { it is T } as? T
 
-    private fun KParameter.isSubclassOf(clazz: KClass<*>): Boolean = this.type.jvmErasure.isSubclassOf(clazz)
+    private fun KParameter.isSubclassOf(clazz: KClass<*>): Boolean =
+        type.jvmErasure.isSubclassOf(clazz)
 
     private fun JsonArray.oneOf(other: JsonArray): Boolean {
         var hasOne = false
@@ -206,7 +250,7 @@ object SwaggerRouter: KoinComponent {
 
     private fun JsonArray.anyOf(other: JsonArray): Boolean {
         var hasOne = false
-        other.forEach {if (this.contains(it)) hasOne = true }
+        other.forEach { if (this.contains(it)) hasOne = true }
         return hasOne
     }
 

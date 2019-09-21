@@ -1,13 +1,12 @@
 package dev.cchilds.verticles
 
 import dev.cchilds.tools.SwaggerMerger
-import dev.cchilds.tools.SwaggerRouter
+import dev.cchilds.tools.route
 import io.reactivex.Completable
 import io.vertx.core.http.HttpServerOptions
 import io.vertx.reactivex.core.AbstractVerticle
 import io.vertx.reactivex.ext.web.Router
 import io.vertx.reactivex.ext.web.handler.StaticHandler
-import java.lang.RuntimeException
 
 class HttpVerticle : AbstractVerticle() {
 
@@ -20,7 +19,7 @@ class HttpVerticle : AbstractVerticle() {
             .setIncludeHidden(false)
 
         val apiRouter = Router.router(vertx)
-        SwaggerRouter.route(apiRouter, swaggerFile, pkg)
+        apiRouter.route(swaggerFile, pkg)
         mainRouter.mountSubRouter("/api", apiRouter)
 
         mainRouter.get().handler(staticHandler)
