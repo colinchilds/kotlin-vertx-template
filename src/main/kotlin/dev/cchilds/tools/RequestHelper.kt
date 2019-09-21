@@ -1,20 +1,19 @@
 package dev.cchilds.tools
 
-import io.reactivex.Single
-import io.vertx.core.json.JsonObject
+import io.vertx.core.Vertx
+import io.vertx.core.eventbus.Message
 import io.vertx.core.shareddata.impl.ClusterSerializable
 import io.vertx.kotlin.core.eventbus.deliveryOptionsOf
-import io.vertx.reactivex.core.Vertx
-import io.vertx.reactivex.core.eventbus.Message
+import io.vertx.kotlin.core.eventbus.requestAwait
 
 interface RequestHelper {
-    fun <T : ClusterSerializable> request(address: String, message: JsonObject?, headers: Map<String, String>?): Single<Message<T>>
+    suspend fun <T : ClusterSerializable> request(address: String, message: Any, headers: Map<String, String>?): Message<T>
 }
 
 class VertxRequestHelper(val vertx: Vertx): RequestHelper {
-    override fun <T : ClusterSerializable> request(address: String, message: JsonObject?, headers: Map<String, String>?): Single<Message<T>> {
+    suspend override fun <T : ClusterSerializable> request(address: String, message: Any, headers: Map<String, String>?): Message<T> {
         if (headers != null)
-            return vertx.eventBus().rxRequest<T>(address, message, deliveryOptionsOf(headers = headers))
-        return vertx.eventBus().rxRequest<T>(address, message)
+            return vertx.eventBus().requestAwait<T>(address, message, deliveryOptionsOf(headers = headers))
+        return vertx.eventBus().requestAwait<T>(address, message)
     }
 }

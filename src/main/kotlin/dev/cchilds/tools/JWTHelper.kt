@@ -1,12 +1,11 @@
 package dev.cchilds.tools
 
-import dev.cchilds.config.Config
+import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.auth.PubSecKeyOptions
+import io.vertx.ext.auth.jwt.JWTAuth
 import io.vertx.ext.auth.jwt.JWTAuthOptions
 import io.vertx.ext.jwt.JWTOptions
-import io.vertx.reactivex.core.Vertx
-import io.vertx.reactivex.ext.auth.jwt.JWTAuth
 
 class JWTHelper(val config: JsonObject, val vertx: Vertx) {
     val authProvider = JWTAuth.create(vertx, JWTAuthOptions()

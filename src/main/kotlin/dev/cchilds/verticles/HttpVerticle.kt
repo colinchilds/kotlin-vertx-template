@@ -2,15 +2,14 @@ package dev.cchilds.verticles
 
 import dev.cchilds.tools.SwaggerMerger
 import dev.cchilds.tools.route
-import io.reactivex.Completable
 import io.vertx.core.http.HttpServerOptions
-import io.vertx.reactivex.core.AbstractVerticle
-import io.vertx.reactivex.ext.web.Router
-import io.vertx.reactivex.ext.web.handler.StaticHandler
+import io.vertx.ext.web.Router
+import io.vertx.ext.web.handler.StaticHandler
+import io.vertx.kotlin.coroutines.CoroutineVerticle
 
-class HttpVerticle : AbstractVerticle() {
+class HttpVerticle : CoroutineVerticle() {
 
-    override fun rxStart(): Completable {
+    override suspend fun start() {
         val mainRouter = Router.router(vertx)
         val pkg = this.javaClass.`package`.name.substringBeforeLast('.') + ".controllers"
         val swaggerFile = SwaggerMerger.mergeAllInDirectory("swagger") ?: throw RuntimeException("Unable to process Swagger file")
@@ -19,14 +18,14 @@ class HttpVerticle : AbstractVerticle() {
             .setIncludeHidden(false)
 
         val apiRouter = Router.router(vertx)
-        apiRouter.route(swaggerFile, pkg)
+        apiRouter.route(vertx, swaggerFile, pkg)
         mainRouter.mountSubRouter("/api", apiRouter)
 
         mainRouter.get().handler(staticHandler)
 
-        return vertx.createHttpServer(HttpServerOptions().setCompressionSupported(true))
-                    .requestHandler(mainRouter)
-                    .rxListen(config().getInteger("http.port", 8080))
-                    .toCompletable()
+        vertx.createHttpServer(HttpServerOptions().setCompressionSupported(true))
+            .requestHandler(mainRouter)
+            .listen(config.getInteger("http.port", 8080))
     }
+
 }

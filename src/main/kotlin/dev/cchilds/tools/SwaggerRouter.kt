@@ -4,21 +4,23 @@ import dev.cchilds.annotations.Body
 import dev.cchilds.exceptions.AuthorizationException
 import dev.cchilds.exceptions.HTTPStatusCode
 import dev.cchilds.exceptions.ResponseCodeException
-import io.reactivex.Single
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.parameters.Parameter
 import io.swagger.v3.parser.ResolverCache
+import io.vertx.core.Vertx
 import io.vertx.core.http.HttpMethod
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.impl.ClusterSerializable
+import io.vertx.ext.web.Router
+import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.api.contract.openapi3.impl.OpenAPI3RequestValidationHandlerImpl
-import io.vertx.reactivex.ext.web.Router
-import io.vertx.reactivex.ext.web.RoutingContext
-import io.vertx.reactivex.ext.web.api.contract.openapi3.OpenAPI3RequestValidationHandler
-import io.vertx.reactivex.ext.web.handler.BodyHandler
-import io.vertx.reactivex.ext.web.handler.JWTAuthHandler
-import io.vertx.reactivex.ext.web.handler.TimeoutHandler
+import io.vertx.ext.web.handler.BodyHandler
+import io.vertx.ext.web.handler.JWTAuthHandler
+import io.vertx.ext.web.handler.TimeoutHandler
+import io.vertx.kotlin.coroutines.dispatcher
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import org.koin.core.KoinComponent
 import org.koin.core.context.GlobalContext.get
 import org.koin.core.inject
@@ -27,19 +29,20 @@ import kotlin.reflect.KAnnotatedElement
 import kotlin.reflect.KCallable
 import kotlin.reflect.KClass
 import kotlin.reflect.KParameter
+import kotlin.reflect.full.callSuspendBy
 import kotlin.reflect.full.instanceParameter
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.jvm.jvmErasure
 
 private typealias RequiredRoles = Map<String, List<String>>
 
-fun Router.route(swaggerFile: OpenAPI, controllerPackage: String) {
+fun Router.route(vertx: Vertx, swaggerFile: OpenAPI, controllerPackage: String) {
     route()
         .produces("application/json")
         .handler(BodyHandler.create().setBodyLimit(5120000))
         .handler(TimeoutHandler.create(30000))
 
-    SwaggerRouter.addRoutesFromSwaggerFile(this, swaggerFile, controllerPackage)
+    SwaggerRouter.addRoutesFromSwaggerFile(vertx, this, swaggerFile, controllerPackage)
 }
 
 object SwaggerRouter : KoinComponent {
@@ -48,6 +51,7 @@ object SwaggerRouter : KoinComponent {
 
     @Suppress("UNCHECKED_CAST")
     fun addRoutesFromSwaggerFile(
+        vertx: Vertx,
         router: Router,
         swaggerFile: OpenAPI,
         controllerPackage: String
@@ -61,12 +65,10 @@ object SwaggerRouter : KoinComponent {
                 val opId = op.operationId ?: ""
                 val split = opId.split('.')
                 if (split.size < 2)
-                    throw RuntimeException(
-                        "Unable to parse operation $opId for path $path")
+                    throw RuntimeException("Unable to parse operation $opId for path $path")
                 val controllerName = split[0]
                 val methodName = split[1]
-                val roles = op.extensions
-                    ?.get("x-auth-roles") as? Map<String, List<String>>
+                val roles = op.extensions?.get("x-auth-roles") as? Map<String, List<String>>
 
                 val controller = controllerInstances.getOrElse(controllerName, {
                     val kclass = Class
@@ -78,29 +80,24 @@ object SwaggerRouter : KoinComponent {
                 })
 
                 val method = controller::class.members.find { it.name == methodName }
-                    ?: throw RuntimeException(
-                        "Method $methodName not found for controller $controllerName")
+                    ?: throw RuntimeException("Method $methodName not found for controller $controllerName")
 
                 val route = router.route(HttpMethod.valueOf(verb.name), convertedPath)
                 if (roles?.isNotEmpty() == true)
                     route.handler(JWTAuthHandler.create(jwtHelper.authProvider))
                 route.handler(
-                    OpenAPI3RequestValidationHandler(
-                        OpenAPI3RequestValidationHandlerImpl(
-                            op,
-                            op.parameters,
-                            swaggerFile,
-                            swaggerCache
-                        )
-                    )
+                    OpenAPI3RequestValidationHandlerImpl(op, op.parameters, swaggerFile, swaggerCache)
                 )
                 route.handler { context ->
                     if (roles?.isNotEmpty() == true)
-                        authenticateUser(
-                            roles,
-                            context.user().principal().getJsonArray("roles", JsonArray())
-                        )
-                    method.callWithParams(controller, context, op.parameters)
+                        authenticateUser(roles, context.user().principal().getJsonArray("roles", JsonArray()))
+                    GlobalScope.launch {
+                        try {
+                            method.callWithParams(controller, context, op.parameters)
+                        } catch (ex: Exception) {
+                            replyWithError(context, ex)
+                        }
+                    }
                 }.failureHandler { replyWithError(it, it.failure()) }
             }
         }
@@ -143,7 +140,7 @@ object SwaggerRouter : KoinComponent {
         }
     }
 
-    private fun KCallable<*>.callWithParams(
+    suspend private fun KCallable<*>.callWithParams(
         instance: Any?,
         context: RoutingContext,
         swaggerParams: List<Parameter>?
@@ -184,7 +181,7 @@ object SwaggerRouter : KoinComponent {
                 }
 
             }
-            handleResponse(context, this.callBy(params))
+            handleResponse(context, callSuspendBy(params))
         } catch (e: Exception) {
             if (e is InvocationTargetException) {
                 val ex = e.targetException
@@ -207,11 +204,6 @@ object SwaggerRouter : KoinComponent {
 
     private fun handleResponse(context: RoutingContext, response: Any?) {
         when (response) {
-            is Single<*> -> {
-                response.subscribe({ onComplete ->
-                    handleResponse(context, onComplete)
-                }, { error -> replyWithError(context, error) })
-            }
             is ClusterSerializable -> {
                 context.response().putHeader("content-type", "application/json")
                 context.response().end(response.encode())

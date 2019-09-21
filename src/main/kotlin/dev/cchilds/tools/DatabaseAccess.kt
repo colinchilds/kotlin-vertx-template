@@ -1,19 +1,14 @@
 package dev.cchilds.tools
 
-import dev.cchilds.config.Config
-import dev.cchilds.exceptions.ServiceException
-import io.reactivex.Single
-import io.vertx.core.AsyncResult
-import io.vertx.core.Handler
+import dev.cchilds.exceptions.ModelNotFoundException
+import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.impl.ClusterSerializable
 import io.vertx.kotlin.pgclient.pgConnectOptionsOf
+import io.vertx.kotlin.sqlclient.getConnectionAwait
 import io.vertx.kotlin.sqlclient.poolOptionsOf
-import io.vertx.reactivex.core.Vertx
-import io.vertx.reactivex.pgclient.PgPool
-import io.vertx.reactivex.sqlclient.SqlClient
-import io.vertx.reactivex.sqlclient.SqlConnection
-import kotlin.jvm.functions.Function1
+import io.vertx.pgclient.PgPool
+import io.vertx.sqlclient.SqlClient
 
 class DatabaseAccess {
     val pool: PgPool
@@ -30,19 +25,40 @@ class DatabaseAccess {
         pool = PgPool.pool(vertx, connectOptions, poolOptions)
     }
 
-    fun <T : ClusterSerializable> getConnection(dbAction: (SqlClient) -> Single<T>): Single<T> {
-        return pool.rxGetConnection()
-            .flatMap { connection -> dbAction.invoke(connection)
-                .doFinally { try { connection.close() } catch (ex: Exception) {} }
-            }
+    suspend fun <T : ClusterSerializable> getConnection(dbAction: suspend (SqlClient) -> T): T {
+        var result: T
+        val connection = pool.getConnectionAwait()
+        try {
+            result = dbAction.invoke(connection)
+        } catch (ex: Exception) {
+            throw ex
+        } finally {
+            try {
+                connection.close()
+            } catch (ignore: Exception) {}
+        }
+        if (result == null)
+            throw ModelNotFoundException("Record not found")
+        return result
     }
 
-    fun <T : ClusterSerializable> getTransaction(dbAction: (SqlClient) -> Single<T>): Single<T> {
-        return pool.rxBegin()
-            .flatMap { connection -> dbAction.invoke(connection)
-                .doOnSuccess { connection.commit() }
-                .doOnError { try { connection.rollback() } catch (ex: Exception) {} }
-                .doFinally { try { connection.close() } catch (ex: Exception) {} }
-            }
+    suspend fun <T : ClusterSerializable> getTransaction(dbAction: suspend (SqlClient) -> T): T {
+        var result: T
+        val connection = pool.getConnectionAwait()
+        val transaction = connection.begin()
+        try {
+            result = dbAction.invoke(connection)
+            transaction.commit()
+        } catch (ex: Exception) {
+            transaction.rollback()
+            throw ex
+        } finally {
+            try {
+                connection.close()
+            } catch (ignore: Exception) {}
+        }
+        if (result == null)
+            throw ModelNotFoundException("Record not found")
+        return result
     }
 }
