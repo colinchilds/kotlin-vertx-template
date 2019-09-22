@@ -1,5 +1,5 @@
 package dev.cchilds.repositories
 
-class InventoryRepo : Repository("inventories") {
+class InventoryRepo(schema: String) : Repository("inventories", schema) {
 
 }

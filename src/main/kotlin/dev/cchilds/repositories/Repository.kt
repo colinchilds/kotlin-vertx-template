@@ -5,8 +5,6 @@ import dev.cchilds.json.jArr
 import dev.cchilds.json.jObj
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
-import io.vertx.kotlin.core.json.json
-import io.vertx.kotlin.core.json.obj
 import io.vertx.kotlin.sqlclient.preparedQueryAwait
 import io.vertx.sqlclient.Row
 import io.vertx.sqlclient.RowSet
@@ -14,14 +12,16 @@ import io.vertx.sqlclient.SqlClient
 import io.vertx.sqlclient.Tuple
 
 
-abstract class Repository(val table: String) {
+abstract class Repository(val table: String, val schema: String) {
+
+    val tableName = "$schema.$table"
 
     suspend fun all(connection: SqlClient): JsonArray {
-        return connection.preparedQueryAwait("select * from $table").getRows()
+        return connection.preparedQueryAwait("select * from $tableName").getRows()
     }
 
     suspend fun find(id: String, connection: SqlClient): JsonObject {
-        val result = connection.preparedQueryAwait("select * from $table where id = $1", Tuple.of(id)).getRow()
+        val result = connection.preparedQueryAwait("select * from $tableName where id = $1", Tuple.of(id)).getRow()
         if (result.isEmpty)
             throw ModelNotFoundException("No object found with ID", jArr(id))
         return result
@@ -32,37 +32,27 @@ abstract class Repository(val table: String) {
     }
 
     suspend fun delete(id: String, connection: SqlClient): JsonObject {
-        return connection.preparedQueryAwait("delete from $table where id = $1", Tuple.of(id)).getRow()
+        return connection.preparedQueryAwait("delete from $tableName where id = $1", Tuple.of(id)).getRow()
     }
 
     private fun RowSet.getRow(): JsonObject {
-        return this.map { row -> jsonRow(row) }.firstOrNull() ?: jObj()
+        return this.map { row -> jsonRow(row, this.columnsNames()) }.firstOrNull() ?: jObj()
     }
 
     private fun RowSet.getRows(): JsonArray {
-        return jArr(this.map { row -> jsonRow(row) })
+        return jArr(this.map { row -> jsonRow(row, this.columnsNames()) })
     }
 
-    private fun jsonRow(row: Row): JsonObject {
-        return buildOutJsonRow(row, json { obj() }, 0)
-    }
+    private fun jsonRow(row: Row, columnNames: List<String>): JsonObject {
+        val json = if (columnNames.contains("data"))
+            row.getValue("data") as JsonObject
+        else
+            jObj()
 
-    private fun buildOutJsonRow(dbRow: Row, currentJson: JsonObject, currentColumn: Int): JsonObject {
-        return when (dbRow.size()) {
-            currentColumn -> currentJson
-            else -> {
-                val columnName = dbRow.getColumnName(currentColumn)
-                val dbRowValue = dbRow.getValue(columnName)
-                val newJsonRow: JsonObject = if (columnName == "data") {
-                    val dataJsonString = dbRow.getString("data")
-                    val json = jObj(dataJsonString)
-                    json.copy().map.putAll(currentJson.map)
-                    json
-                } else {
-                    currentJson.put(columnName, dbRowValue)
-                }
-                buildOutJsonRow(dbRow, newJsonRow, currentColumn + 1)
-            }
+        columnNames.forEachIndexed { i, s ->
+            if (s != "data")
+                json.put(s, row.getValue(i))
         }
+        return json
     }
 }

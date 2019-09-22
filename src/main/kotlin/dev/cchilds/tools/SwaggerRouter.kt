@@ -21,10 +21,12 @@ import io.vertx.ext.web.handler.TimeoutHandler
 import io.vertx.kotlin.coroutines.dispatcher
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.koin.core.KoinComponent
 import org.koin.core.context.GlobalContext.get
 import org.koin.core.inject
 import java.lang.reflect.InvocationTargetException
+import kotlin.concurrent.thread
 import kotlin.reflect.KAnnotatedElement
 import kotlin.reflect.KCallable
 import kotlin.reflect.KClass
@@ -36,13 +38,13 @@ import kotlin.reflect.jvm.jvmErasure
 
 private typealias RequiredRoles = Map<String, List<String>>
 
-fun Router.route(vertx: Vertx, swaggerFile: OpenAPI, controllerPackage: String) {
+fun Router.route(swaggerFile: OpenAPI, controllerPackage: String) {
     route()
         .produces("application/json")
         .handler(BodyHandler.create().setBodyLimit(5120000))
         .handler(TimeoutHandler.create(30000))
 
-    SwaggerRouter.addRoutesFromSwaggerFile(vertx, this, swaggerFile, controllerPackage)
+    SwaggerRouter.addRoutesFromSwaggerFile(this, swaggerFile, controllerPackage)
 }
 
 object SwaggerRouter : KoinComponent {
@@ -51,7 +53,6 @@ object SwaggerRouter : KoinComponent {
 
     @Suppress("UNCHECKED_CAST")
     fun addRoutesFromSwaggerFile(
-        vertx: Vertx,
         router: Router,
         swaggerFile: OpenAPI,
         controllerPackage: String
@@ -59,54 +60,60 @@ object SwaggerRouter : KoinComponent {
         val swaggerCache = ResolverCache(swaggerFile, null, null)
 
         val controllerInstances = mutableMapOf<String, Any>()
-        swaggerFile.paths.forEach { (path, pathItem) ->
-            val convertedPath = path.replace('{', ':').replace("}", "")
-            pathItem.readOperationsMap().forEach { (verb, op) ->
-                val opId = op.operationId ?: ""
-                val split = opId.split('.')
-                if (split.size < 2)
-                    throw RuntimeException("Unable to parse operation $opId for path $path")
-                val controllerName = split[0]
-                val methodName = split[1]
-                val roles = op.extensions?.get("x-auth-roles") as? Map<String, List<String>>
+        runBlocking {
+            swaggerFile.paths.forEach { (path, pathItem) ->
+                launch {
+                    val convertedPath = path.replace('{', ':').replace("}", "")
+                    pathItem.readOperationsMap().forEach { (verb, op) ->
+                        val opId = op.operationId ?: ""
+                        val split = opId.split('.')
+                        if (split.size < 2)
+                            throw RuntimeException("Unable to parse operation $opId for path $path")
+                        val controllerName = split[0]
+                        val methodName = split[1]
+                        val roles = op.extensions?.get("x-auth-roles") as? Map<String, List<String>>
 
-                val controller = controllerInstances.getOrElse(controllerName, {
-                    val kclass = Class
-                        .forName("${controllerPackage}.$controllerName")
-                        .kotlin
-                    val inst = get().koin.get<Any>(kclass, null, null)
-                    controllerInstances[controllerName] = inst
-                    inst
-                })
+                        val controller = controllerInstances.getOrElse(controllerName, {
+                            val kclass = Class
+                                .forName("${controllerPackage}.$controllerName")
+                                .kotlin
+                            val inst = get().koin.get<Any>(kclass, null, null)
+                            controllerInstances[controllerName] = inst
+                            inst
+                        })
 
-                val method = controller::class.members.find { it.name == methodName }
-                    ?: throw RuntimeException("Method $methodName not found for controller $controllerName")
+                        val method = controller::class.members.find { it.name == methodName }
+                            ?: throw RuntimeException("Method $methodName not found for controller $controllerName")
 
-                val route = router.route(HttpMethod.valueOf(verb.name), convertedPath)
-                if (roles?.isNotEmpty() == true)
-                    route.handler(JWTAuthHandler.create(jwtHelper.authProvider))
-                route.handler(
-                    OpenAPI3RequestValidationHandlerImpl(op, op.parameters, swaggerFile, swaggerCache)
-                )
-                route.handler { context ->
-                    if (roles?.isNotEmpty() == true)
-                        authenticateUser(roles, context.user().principal().getJsonArray("roles", JsonArray()))
-                    GlobalScope.launch {
-                        try {
-                            method.callWithParams(controller, context, op.parameters)
-                        } catch (ex: Exception) {
-                            replyWithError(context, ex)
-                        }
+                        val route = router.route(HttpMethod.valueOf(verb.name), convertedPath)
+                        if (roles?.isNotEmpty() == true)
+                            route.handler(JWTAuthHandler.create(jwtHelper.authProvider))
+                        route.handler(
+                            OpenAPI3RequestValidationHandlerImpl(op, op.parameters, swaggerFile, swaggerCache)
+                        )
+                        route.handler { context ->
+                            if (roles?.isNotEmpty() == true)
+                                authenticateUser(roles, context.user().principal())
+                            GlobalScope.launch {
+                                try {
+                                    method.callWithParams(controller, context, op.parameters)
+                                } catch (ex: Exception) {
+                                    replyWithError(context, ex)
+                                }
+                            }
+                        }.failureHandler { replyWithError(it, it.failure()) }
                     }
-                }.failureHandler { replyWithError(it, it.failure()) }
+                }
             }
         }
     }
 
-    private fun authenticateUser(
-        requiredRoles: RequiredRoles,
-        userRoles: JsonArray
-    ) {
+    private fun authenticateUser(requiredRoles: RequiredRoles, principal: JsonObject) {
+        val userRoles = principal.getJsonArray("roles", JsonArray())
+        val created = principal.getLong("created", 0)
+        if (jwtHelper.isTokenExpired(created))
+            throw AuthorizationException()
+
         with (requiredRoles) {
             if ((taggedWith("oneOf") && !userRoles.oneOf(rolesIn("oneOf"))) ||
                 (taggedWith("anyOf") && !userRoles.anyOf(rolesIn("anyOf"))) ||

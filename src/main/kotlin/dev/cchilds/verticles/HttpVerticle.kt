@@ -18,7 +18,7 @@ class HttpVerticle : CoroutineVerticle() {
             .setIncludeHidden(false)
 
         val apiRouter = Router.router(vertx)
-        apiRouter.route(vertx, swaggerFile, pkg)
+        apiRouter.route(swaggerFile, pkg)
         mainRouter.mountSubRouter("/api", apiRouter)
 
         mainRouter.get().handler(staticHandler)

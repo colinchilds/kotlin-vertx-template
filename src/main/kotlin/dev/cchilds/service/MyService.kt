@@ -8,6 +8,8 @@ import dev.cchilds.tools.RequestHelper
 import dev.cchilds.tools.VertxRequestHelper
 import dev.cchilds.verticles.HttpVerticle
 import io.vertx.core.Vertx
+import io.vertx.kotlin.core.deployVerticleAwait
+import kotlinx.coroutines.runBlocking
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -25,7 +27,7 @@ fun start(overrideModule: Module? = null) {
         single { JWTHelper(config, vertx) }
         single<RequestHelper> { VertxRequestHelper(get()) }
         single { DatabaseAccess(config, vertx) }
-        single { InventoryRepo() }
+        single { InventoryRepo("public") }
     }
     startKoin {
         modules(buildAutoModule())
@@ -35,5 +37,7 @@ fun start(overrideModule: Module? = null) {
         }
     }
 
-    vertx.deployVerticle(HttpVerticle())
+    runBlocking {
+        vertx.deployVerticleAwait(HttpVerticle())
+    }
 }
