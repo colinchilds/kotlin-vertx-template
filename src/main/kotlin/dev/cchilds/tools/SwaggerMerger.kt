@@ -9,7 +9,7 @@ import org.reflections.Reflections
 import org.reflections.scanners.ResourcesScanner
 
 object SwaggerMerger {
-    fun mergeAllInDirectory(path: String): OpenAPI? {
+    @Synchronized fun mergeAllInDirectory(path: String): OpenAPI? {
         val reflections = Reflections(path, ResourcesScanner())
         val resourceList = reflections.getResources { it != null && it.endsWith(".yaml") }
         var merged: OpenAPI? = null
