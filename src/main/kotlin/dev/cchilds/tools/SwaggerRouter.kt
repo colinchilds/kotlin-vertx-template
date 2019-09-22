@@ -36,8 +36,6 @@ import kotlin.reflect.full.instanceParameter
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.jvm.jvmErasure
 
-private typealias RequiredRoles = Map<String, List<String>>
-
 fun Router.route(swaggerFile: OpenAPI, controllerPackage: String) {
     route()
         .produces("application/json")
@@ -93,7 +91,7 @@ object SwaggerRouter : KoinComponent {
                         )
                         route.handler { context ->
                             if (roles?.isNotEmpty() == true)
-                                authenticateUser(roles, context.user().principal())
+                                jwtHelper.authenticateUser(roles, context.user().principal())
                             GlobalScope.launch {
                                 try {
                                     method.callWithParams(controller, context, op.parameters)
@@ -107,27 +105,6 @@ object SwaggerRouter : KoinComponent {
             }
         }
     }
-
-    private fun authenticateUser(requiredRoles: RequiredRoles, principal: JsonObject) {
-        val userRoles = principal.getJsonArray("roles", JsonArray())
-        val created = principal.getLong("created", 0)
-        if (jwtHelper.isTokenExpired(created))
-            throw AuthorizationException()
-
-        with (requiredRoles) {
-            if ((taggedWith("oneOf") && !userRoles.oneOf(rolesIn("oneOf"))) ||
-                (taggedWith("anyOf") && !userRoles.anyOf(rolesIn("anyOf"))) ||
-                (taggedWith("allOf") && !userRoles.allOf(rolesIn("allOf")))
-            )
-                throw AuthorizationException()
-        }
-    }
-
-    private fun RequiredRoles.taggedWith(tag: String): Boolean =
-        this[tag] != null
-
-    private fun RequiredRoles.rolesIn(tag: String): JsonArray =
-        JsonArray(this[tag])
 
     private fun replyWithError(context: RoutingContext, failure: Throwable) {
         val response = context.response()
@@ -234,24 +211,4 @@ object SwaggerRouter : KoinComponent {
 
     private fun KParameter.isSubclassOf(clazz: KClass<*>): Boolean =
         type.jvmErasure.isSubclassOf(clazz)
-
-    private fun JsonArray.oneOf(other: JsonArray): Boolean {
-        var hasOne = false
-        other.forEach {
-            if (this.contains(it)) {
-                if (hasOne)
-                    return false
-                hasOne = true
-            }
-        }
-        return hasOne
-    }
-
-    private fun JsonArray.anyOf(other: JsonArray): Boolean {
-        var hasOne = false
-        other.forEach { if (this.contains(it)) hasOne = true }
-        return hasOne
-    }
-
-    private fun JsonArray.allOf(other: JsonArray) = this == other
 }
