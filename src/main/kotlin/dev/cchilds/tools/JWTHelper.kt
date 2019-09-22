@@ -11,7 +11,7 @@ import io.vertx.ext.jwt.JWTOptions
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
-private typealias RequiredRoles = Map<String, List<String>>
+typealias RequiredRoles = Map<String, List<String>>
 
 class JWTHelper(val config: JsonObject, val vertx: Vertx) {
 

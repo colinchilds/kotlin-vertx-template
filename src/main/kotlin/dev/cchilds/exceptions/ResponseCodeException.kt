@@ -41,3 +41,4 @@ class ModelNotFoundException(message: String = "", details: JsonArray = JsonArra
 class TooManyRequestsException(message: String = "", details: JsonArray = JsonArray(), throwable: Throwable? = null) : ResponseCodeException(message, details, TOO_MANY_REQUESTS, throwable)
 class UnavailableException(message: String = "", details: JsonArray = JsonArray(), throwable: Throwable? = null) : ResponseCodeException(message, details, UNAVAILABLE, throwable)
 class ServiceException(message: String = "", details: JsonArray = JsonArray(), throwable: Throwable? = null) : ResponseCodeException(message, details, INTERNAL_ERROR, throwable)
+class TimeoutException(message: String = "", details: JsonArray = JsonArray(), throwable: Throwable? = null) : ResponseCodeException(message, details, GATEWAY_TIMEOUT, throwable)

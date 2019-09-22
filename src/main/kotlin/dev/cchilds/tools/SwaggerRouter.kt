@@ -1,13 +1,14 @@
 package dev.cchilds.tools
 
 import dev.cchilds.annotations.Body
-import dev.cchilds.exceptions.AuthorizationException
+import dev.cchilds.annotations.Timeout
 import dev.cchilds.exceptions.HTTPStatusCode
 import dev.cchilds.exceptions.ResponseCodeException
+import dev.cchilds.exceptions.TimeoutException
+import dev.cchilds.json.jArr
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.parameters.Parameter
 import io.swagger.v3.parser.ResolverCache
-import io.vertx.core.Vertx
 import io.vertx.core.http.HttpMethod
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -17,16 +18,11 @@ import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.api.contract.openapi3.impl.OpenAPI3RequestValidationHandlerImpl
 import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.handler.JWTAuthHandler
-import io.vertx.ext.web.handler.TimeoutHandler
-import io.vertx.kotlin.coroutines.dispatcher
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import org.koin.core.KoinComponent
 import org.koin.core.context.GlobalContext.get
 import org.koin.core.inject
 import java.lang.reflect.InvocationTargetException
-import kotlin.concurrent.thread
 import kotlin.reflect.KAnnotatedElement
 import kotlin.reflect.KCallable
 import kotlin.reflect.KClass
@@ -40,7 +36,6 @@ fun Router.route(swaggerFile: OpenAPI, controllerPackage: String) {
     route()
         .produces("application/json")
         .handler(BodyHandler.create().setBodyLimit(5120000))
-        .handler(TimeoutHandler.create(30000))
 
     SwaggerRouter.addRoutesFromSwaggerFile(this, swaggerFile, controllerPackage)
 }
@@ -89,19 +84,35 @@ object SwaggerRouter : KoinComponent {
                         route.handler(
                             OpenAPI3RequestValidationHandlerImpl(op, op.parameters, swaggerFile, swaggerCache)
                         )
-                        route.handler { context ->
-                            if (roles?.isNotEmpty() == true)
-                                jwtHelper.authenticateUser(roles, context.user().principal())
-                            GlobalScope.launch {
-                                try {
-                                    method.callWithParams(controller, context, op.parameters)
-                                } catch (ex: Exception) {
-                                    replyWithError(context, ex)
-                                }
-                            }
-                        }.failureHandler { replyWithError(it, it.failure()) }
+                        route.handler { context -> routeHandler(context, controller, method, op.parameters, roles, opId) }
+                            .failureHandler { replyWithError(it, it.failure()) }
                     }
                 }
+            }
+        }
+    }
+
+    private fun routeHandler(
+        context: RoutingContext,
+        controller: Any,
+        method: KCallable<*>,
+        params: List<Parameter>?,
+        roles: RequiredRoles?,
+        opId: String
+    ) {
+        if (roles?.isNotEmpty() == true)
+            jwtHelper.authenticateUser(roles, context.user().principal())
+
+        GlobalScope.launch {
+            try {
+                val timeout = method.findAnnotation<Timeout>()?.length ?: 30000
+                withTimeout(timeout) {
+                    method.callWithParams(controller, context, params)
+                }
+            } catch (ex: TimeoutCancellationException) {
+                replyWithError(context, TimeoutException("Timed out waiting for response", jArr(opId), ex))
+            } catch (ex: Exception) {
+                replyWithError(context, ex)
             }
         }
     }
@@ -122,6 +133,7 @@ object SwaggerRouter : KoinComponent {
                 .setStatusCode(context.statusCode())
                 .end(failure.message ?: "")
         }
+        failure.printStackTrace()
     }
 
     suspend private fun KCallable<*>.callWithParams(
@@ -169,10 +181,8 @@ object SwaggerRouter : KoinComponent {
         } catch (e: Exception) {
             if (e is InvocationTargetException) {
                 val ex = e.targetException
-                ex.printStackTrace()
                 throw ex
             } else {
-                e.printStackTrace()
                 throw e
             }
         }
@@ -187,13 +197,15 @@ object SwaggerRouter : KoinComponent {
     }
 
     private fun handleResponse(context: RoutingContext, response: Any?) {
-        when (response) {
-            is ClusterSerializable -> {
-                context.response().putHeader("content-type", "application/json")
-                context.response().end(response.encode())
-            }
-            !is Unit -> {
-                context.response().end(response.toString())
+        if (!context.response().ended()) {
+            when (response) {
+                is ClusterSerializable -> {
+                    context.response().putHeader("content-type", "application/json")
+                    context.response().end(response.encode())
+                }
+                !is Unit -> {
+                    context.response().end(response.toString())
+                }
             }
         }
     }
