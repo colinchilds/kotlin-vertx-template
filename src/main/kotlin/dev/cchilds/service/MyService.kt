@@ -30,7 +30,7 @@ fun start(overrideModule: Module? = null) {
         single { InventoryRepo("public") }
     }
     startKoin {
-        modules(buildAutoModule())
+        modules(buildAutoModule(HttpVerticle::class.java))
         modules(module)
         overrideModule?.let {
             modules(it)

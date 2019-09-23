@@ -31,7 +31,7 @@ fun Root.setup() {
         single { InventoryRepo("test") }
     }
     startKoin {
-        modules(buildAutoModule())
+        modules(buildAutoModule(HttpVerticle::class.java))
         modules(module)
     }
 

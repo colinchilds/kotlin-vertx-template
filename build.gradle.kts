@@ -12,8 +12,7 @@ buildscript {
 }
 
 plugins {
-//    `build-scan`
-    kotlin("jvm") version "1.3.40"
+    kotlin("jvm") version "1.3.50"
     id("com.moowork.node") version "1.3.1"
     id("com.github.johnrengelman.shadow") version "5.1.0"
     id("com.palantir.docker") version "0.22.1"
@@ -21,20 +20,11 @@ plugins {
     application
 }
 
-repositories {
-    mavenCentral()
-    jcenter()
-}
-
-
-
-group = "dev.cchilds.kotlin-vertx-template"
-version = "1.0-SNAPSHOT"
-
-
 val vertxVersion = "3.8.1"
 
 dependencies {
+    implementation(project(":Koddle"))
+
     implementation(kotlin("stdlib"))
     implementation(kotlin("reflect"))
 
@@ -61,22 +51,28 @@ dependencies {
     testRuntimeOnly("org.spekframework.spek2:spek-runner-junit5:2.0.7")
     testImplementation("org.amshove.kluent:kluent:1.54")
     implementation("org.apache.commons:commons-collections4:4.0")
-
 }
 
+repositories {
+    mavenCentral()
+    jcenter()
+}
+
+group = "dev.cchilds.kotlin-vertx-template"
+version = "1.0-SNAPSHOT"
+
 tasks {
-    test {
-        useJUnitPlatform {
-            includeEngines("spek2")
-        }
-    }
     compileKotlin {
         kotlinOptions.jvmTarget = "1.8"
     }
     compileTestKotlin {
         kotlinOptions.jvmTarget = "1.8"
     }
-
+    test {
+        useJUnitPlatform {
+            includeEngines("spek2")
+        }
+    }
     withType<ShadowJar> {
         baseName = "kvt"
         classifier = null
