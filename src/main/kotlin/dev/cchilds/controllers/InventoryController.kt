@@ -5,18 +5,30 @@ import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.impl.ClusterSerializable
 import me.koddle.annotations.Body
 import me.koddle.controllers.BaseController
-import me.koddle.json.jObj
 
 class InventoryController(val inventoryRepo: InventoryRepo) : BaseController() {
 
-    suspend fun get(id: String?, searchString: String?, limit: Int = 100): ClusterSerializable {
+    suspend fun get(id: String?): ClusterSerializable {
         return if (id != null)
-            da.getConnection { connection -> inventoryRepo.find(id, connection) }
+            da.getConnection { conn -> inventoryRepo.find(id, conn) }
         else
-            da.getConnection { connection -> inventoryRepo.all(connection) }
+            da.getConnection { conn -> inventoryRepo.all(conn) }
     }
 
-    fun post(@Body body:JsonObject): JsonObject {
-        return jObj("body" to body)
+    suspend fun post(@Body body:JsonObject): JsonObject {
+        return da.getConnection { conn -> inventoryRepo.insert(body, conn) }
+    }
+
+    suspend fun patch(id: String, @Body body:JsonObject): JsonObject {
+        return da.getTransaction { conn ->
+            val fromDb = inventoryRepo.find(id, conn)
+            fromDb.mergeIn(body)
+            body.forEach { (key, value) -> if (value == null) fromDb.remove(key) }
+            inventoryRepo.update(id, fromDb, conn)
+        }
+    }
+
+    suspend fun delete(id: String) {
+        da.getConnection { conn -> inventoryRepo.delete(id, conn) }
     }
 }

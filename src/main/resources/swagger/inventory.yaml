@@ -42,6 +42,52 @@ paths:
                   $ref: '#/components/schemas/InventoryItem'
         '400':
           description: bad input parameter
+    patch:
+      tags:
+        - admins
+      summary: updates an inventory item
+      operationId: InventoryController.patch
+      description: Updates an existing item in the system
+      x-auth-roles:
+        anyOf:
+          - ADMIN
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: item updated
+        '400':
+          description: 'invalid input, object invalid'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryItem'
+        description: Inventory item to add
+    delete:
+      tags:
+        - admins
+      summary: deletes an inventory item
+      operationId: InventoryController.delete
+      description: Removes an item from the system
+      x-auth-roles:
+        anyOf:
+          - ADMIN
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: item removed
+        '400':
+          description: 'invalid input, object invalid'
   /inventory:
     get:
       tags:
@@ -95,41 +141,24 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InventoryItem'
+              allOf:
+                - $ref: '#/components/schemas/InventoryItem'
+                - type: object
+                  required:
+                    - name
+                    - manufacturer
+                    - releaseDate
+                    - count
         description: Inventory item to add
-  /login:
-    post:
-      tags:
-        - developers
-      summary: authenticas a user
-      operationId: DirectoryController.post
-      description: Authenticates a user and returns a JWT token
-      responses:
-        '200':
-          description: user authenticated
-        '401':
-          description: user unauthorized
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginCredentials'
-        description: User credentials to authenticate
 components:
   schemas:
     InventoryItem:
       type: object
-      required:
-        - id
-        - name
-        - manufacturer
-        - releaseDate
-        - count
       properties:
         id:
           type: string
           format: uuid
-          example: d290f1ee-6c54-4b01-90e6-d701748f0851
+          example: DQS7GZV
         name:
           type: string
           example: Widget Adapter
@@ -159,15 +188,3 @@ components:
           type: string
           example: 408-867-5309
       type: object
-    LoginCredentials:
-      type: object
-      required:
-        - username
-        - password
-      properties:
-        username:
-          type: string
-          example: bob
-        password:
-          type: string
-          example: secret
