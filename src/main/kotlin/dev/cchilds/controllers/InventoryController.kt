@@ -1,10 +1,11 @@
 package dev.cchilds.controllers
 
-import dev.cchilds.annotations.Body
-import dev.cchilds.json.jObj
 import dev.cchilds.repositories.InventoryRepo
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.impl.ClusterSerializable
+import me.koddle.annotations.Body
+import me.koddle.controllers.BaseController
+import me.koddle.json.jObj
 
 class InventoryController(val inventoryRepo: InventoryRepo) : BaseController() {
 

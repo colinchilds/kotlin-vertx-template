@@ -1,12 +1,13 @@
 package dev.cchilds.controllers
 
-import dev.cchilds.annotations.Body
-import dev.cchilds.exceptions.AuthorizationException
-import dev.cchilds.models.User
-import dev.cchilds.tools.JWTHelper
 import io.vertx.kotlin.core.json.array
 import io.vertx.kotlin.core.json.json
 import io.vertx.kotlin.core.json.obj
+import me.koddle.annotations.Body
+import me.koddle.controllers.BaseController
+import me.koddle.exceptions.AuthorizationException
+import me.koddle.models.User
+import me.koddle.tools.JWTHelper
 
 class DirectoryController(val jwtHelper: JWTHelper) : BaseController() {
 

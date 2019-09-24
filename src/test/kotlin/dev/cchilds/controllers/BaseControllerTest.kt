@@ -1,12 +1,12 @@
 package dev.cchilds.controllers
 
-import dev.cchilds.config.Config
+import me.koddle.config.Config
 import dev.cchilds.repositories.InventoryRepo
-import dev.cchilds.service.buildAutoModule
-import dev.cchilds.tools.DatabaseAccess
-import dev.cchilds.tools.JWTHelper
-import dev.cchilds.tools.RequestHelper
-import dev.cchilds.tools.VertxRequestHelper
+import me.koddle.service.buildAutoModule
+import me.koddle.tools.DatabaseAccess
+import me.koddle.tools.JWTHelper
+import me.koddle.tools.RequestHelper
+import me.koddle.tools.VertxRequestHelper
 import dev.cchilds.verticles.HttpVerticle
 import io.vertx.core.Vertx
 import io.vertx.ext.web.client.WebClient

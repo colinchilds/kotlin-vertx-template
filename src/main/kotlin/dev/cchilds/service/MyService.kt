@@ -1,15 +1,16 @@
 package dev.cchilds.service
 
-import dev.cchilds.config.Config
 import dev.cchilds.repositories.InventoryRepo
-import dev.cchilds.tools.DatabaseAccess
-import dev.cchilds.tools.JWTHelper
-import dev.cchilds.tools.RequestHelper
-import dev.cchilds.tools.VertxRequestHelper
 import dev.cchilds.verticles.HttpVerticle
 import io.vertx.core.Vertx
 import io.vertx.kotlin.core.deployVerticleAwait
 import kotlinx.coroutines.runBlocking
+import me.koddle.config.Config
+import me.koddle.service.buildAutoModule
+import me.koddle.tools.DatabaseAccess
+import me.koddle.tools.JWTHelper
+import me.koddle.tools.RequestHelper
+import me.koddle.tools.VertxRequestHelper
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.dsl.module

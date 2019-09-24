@@ -1,6 +1,6 @@
 package dev.cchilds.migrations
 
-import dev.cchilds.config.Config
+import me.koddle.config.Config
 import io.vertx.core.Vertx
 import org.flywaydb.core.Flyway
 

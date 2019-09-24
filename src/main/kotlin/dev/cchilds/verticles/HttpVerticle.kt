@@ -1,7 +1,7 @@
 package dev.cchilds.verticles
 
-import dev.cchilds.tools.SwaggerMerger
-import dev.cchilds.tools.route
+import me.koddle.tools.SwaggerMerger
+import me.koddle.tools.route
 import io.vertx.core.http.HttpServerOptions
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.StaticHandler
