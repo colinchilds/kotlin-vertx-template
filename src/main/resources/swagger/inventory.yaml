@@ -18,7 +18,7 @@ tags:
   - name: developers
     description: Operations available to regular developers
 paths:
-  /inventory/{id}:
+  /api/inventory/{id}:
     get:
       tags:
         - developers
@@ -88,7 +88,7 @@ paths:
           description: item removed
         '400':
           description: 'invalid input, object invalid'
-  /inventory:
+  /api/inventory:
     get:
       tags:
         - developers

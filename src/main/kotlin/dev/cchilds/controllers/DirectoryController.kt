@@ -1,5 +1,6 @@
 package dev.cchilds.controllers
 
+import dev.cchilds.models.User
 import io.vertx.core.http.Cookie
 import io.vertx.ext.web.RoutingContext
 import io.vertx.kotlin.core.json.array
@@ -8,7 +9,6 @@ import io.vertx.kotlin.core.json.obj
 import me.koddle.annotations.Body
 import me.koddle.controllers.BaseController
 import me.koddle.exceptions.AuthorizationException
-import me.koddle.models.User
 import me.koddle.tools.JWTHelper
 
 class DirectoryController(val jwtHelper: JWTHelper) : BaseController() {
