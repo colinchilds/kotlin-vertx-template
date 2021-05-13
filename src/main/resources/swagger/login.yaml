@@ -3,10 +3,10 @@ info:
   version: "1.0.0"
   title: Login API
 paths:
-  /api/login:
+  /login:
     post:
       summary: authenticates a user
-      operationId: DirectoryController.post
+      operationId: LoginController.post
       description: Authenticates a user and returns a JWT token
       responses:
         '200':

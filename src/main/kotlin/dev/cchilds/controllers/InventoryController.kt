@@ -4,19 +4,15 @@ import dev.cchilds.repositories.InventoryRepo
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.impl.ClusterSerializable
 import me.koddle.annotations.Body
-import me.koddle.controllers.BaseController
 
-class InventoryController(val inventoryRepo: InventoryRepo) : BaseController() {
+class InventoryController(private val inventoryRepo: InventoryRepo) : BaseController() {
 
     suspend fun get(id: String?): ClusterSerializable {
-        return if (id != null)
-            da.getConnection { conn -> inventoryRepo.find(id, conn) }
-        else
-            da.getConnection { conn -> inventoryRepo.all(conn) }
+        return if (id != null) inventoryRepo.find(id) else inventoryRepo.all()
     }
 
     suspend fun post(@Body body:JsonObject): JsonObject {
-        return da.getConnection { conn -> inventoryRepo.insert(body, conn) }
+        return inventoryRepo.insert(body)
     }
 
     suspend fun patch(id: String, @Body body:JsonObject): JsonObject {
@@ -29,6 +25,6 @@ class InventoryController(val inventoryRepo: InventoryRepo) : BaseController() {
     }
 
     suspend fun delete(id: String) {
-        da.getConnection { conn -> inventoryRepo.delete(id, conn) }
+        inventoryRepo.delete(id)
     }
 }

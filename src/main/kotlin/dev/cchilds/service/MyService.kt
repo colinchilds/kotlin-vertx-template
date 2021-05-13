@@ -1,6 +1,7 @@
 package dev.cchilds.service
 
 import dev.cchilds.repositories.InventoryRepo
+import dev.cchilds.security.PubSecJWTManager
 import dev.cchilds.verticles.HttpVerticle
 import io.vertx.core.Vertx
 import io.vertx.kotlin.core.deployVerticleAwait
@@ -8,7 +9,6 @@ import kotlinx.coroutines.runBlocking
 import me.koddle.config.Config
 import me.koddle.service.buildAutoModule
 import me.koddle.tools.DatabaseAccess
-import me.koddle.tools.JWTHelper
 import me.koddle.tools.RequestHelper
 import me.koddle.tools.VertxRequestHelper
 import org.koin.core.context.startKoin
@@ -25,7 +25,7 @@ fun start(overrideModule: Module? = null) {
 
     val module = module(override = true) {
         single { vertx }
-        single { JWTHelper(config, vertx) }
+        single { PubSecJWTManager(config, vertx) }
         single<RequestHelper> { VertxRequestHelper(get()) }
         single { DatabaseAccess(config, vertx) }
         single { InventoryRepo("public") }
