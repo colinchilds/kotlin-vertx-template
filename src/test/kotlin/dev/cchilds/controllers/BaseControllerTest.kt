@@ -1,9 +1,10 @@
 package dev.cchilds.controllers
 
 import dev.cchilds.models.User
-import dev.cchilds.repositories.InventoryRepo
-import dev.cchilds.verticles.HttpVerticle
+import dev.cchilds.security.PubSecJWTManager
+import dev.cchilds.service.MyService
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.client.HttpRequest
 import io.vertx.ext.web.client.WebClient
 import io.vertx.kotlin.core.deployVerticleAwait
@@ -11,50 +12,43 @@ import kotlinx.coroutines.runBlocking
 import me.koddle.config.Config
 import me.koddle.json.jArr
 import me.koddle.json.jObj
-import me.koddle.service.buildAutoModule
 import me.koddle.tools.DatabaseAccess
-import me.koddle.tools.JWTHelper
-import me.koddle.tools.RequestHelper
-import me.koddle.tools.VertxRequestHelper
-import org.koin.core.context.startKoin
-import org.koin.dsl.module
-import org.spekframework.spek2.dsl.Root
-import org.spekframework.spek2.lifecycle.CachingMode
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.TestInstance
 
-fun Root.setup() {
-    val vertx by memoized { Vertx.vertx() }
-    val config = Config.config(vertx)
-    val webClient by memoized { WebClient.create(vertx) }
-    val deployIds by memoized(mode = CachingMode.EACH_GROUP, factory = { mutableListOf<String>() } )
-    val jwtHelper by memoized { JWTHelper(config, vertx) }
-    val dbAccess by memoized { DatabaseAccess(config, vertx) }
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+open class BaseControllerTest {
 
-    val module = module(override = true) {
-        single { vertx }
-        single { jwtHelper }
-        single<RequestHelper> { VertxRequestHelper(get()) }
-        single { dbAccess }
-        single { InventoryRepo("test") }
-    }
-    startKoin {
-        modules(buildAutoModule(HttpVerticle::class.java))
-        modules(module)
-    }
+    lateinit var vertx: Vertx
+    lateinit var webClient: WebClient
+    lateinit var config: JsonObject
+    lateinit var authManager: PubSecJWTManager
+    lateinit var dbAccess: DatabaseAccess
+    val baseURL = "http://localhost:8080"
 
-    runBlocking {
-        deployIds.add(vertx.deployVerticleAwait(HttpVerticle()))
+    @BeforeAll
+    internal fun beforeAll() {
+        vertx = Vertx.vertx()
+        System.setProperty("ENVIRONMENT", "test")
+        webClient = WebClient.create(vertx)
+
+        runBlocking {
+            config = Config.config(vertx)
+            authManager = PubSecJWTManager(config, vertx)
+            dbAccess = DatabaseAccess(config, vertx)
+            vertx.deployVerticleAwait(MyService())
+        }
     }
 
-}
+    fun <T> HttpRequest<T>.setUserToken(): HttpRequest<T> {
+        val token = authManager.generateToken(jObj(User.ROLES to jArr(User.Role.USER)))
+        this.bearerTokenAuthentication(token)
+        return this
+    }
 
-fun <T> HttpRequest<T>.setUserToken(jwtHelper: JWTHelper): HttpRequest<T> {
-    val token = jwtHelper.generateToken(jObj(User.ROLES to jArr(User.Role.USER)))
-    this.bearerTokenAuthentication(token)
-    return this
-}
-
-fun <T> HttpRequest<T>.setAdminToken(jwtHelper: JWTHelper): HttpRequest<T> {
-    val token = jwtHelper.generateToken(jObj(User.ROLES to jArr(User.Role.ADMIN)))
-    this.bearerTokenAuthentication(token)
-    return this
+    fun <T> HttpRequest<T>.setAdminToken(): HttpRequest<T> {
+        val token = authManager.generateToken(jObj(User.ROLES to jArr(User.Role.ADMIN)))
+        this.bearerTokenAuthentication(token)
+        return this
+    }
 }

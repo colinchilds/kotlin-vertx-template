@@ -1,94 +1,151 @@
 package dev.cchilds.controllers
 
-import io.vertx.ext.web.client.WebClient
+import dev.cchilds.models.InventoryItem
 import io.vertx.kotlin.ext.web.client.sendAwait
 import io.vertx.kotlin.ext.web.client.sendJsonAwait
 import io.vertx.kotlin.sqlclient.preparedQueryAwait
 import kotlinx.coroutines.runBlocking
 import me.koddle.exceptions.HTTPStatusCode
+import me.koddle.json.jArr
 import me.koddle.json.jObj
-import me.koddle.tools.DatabaseAccess
-import me.koddle.tools.JWTHelper
-import org.amshove.kluent.`should be equal to`
-import org.amshove.kluent.`should be`
-import org.amshove.kluent.`should equal`
-import org.spekframework.spek2.Spek
-import org.spekframework.spek2.style.specification.describe
+import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertAll
 
-object InventoryControllerTest : Spek({
-    setup()
-    val webClient: WebClient by memoized()
-    val jwtHelper: JWTHelper by memoized()
-    val dbAccess: DatabaseAccess by memoized()
+class InventoryControllerTest : BaseControllerTest() {
 
-    afterEachTest {
+    private val testItem = jObj(
+        InventoryItem.NAME to "widget",
+        InventoryItem.MANUFACTURER to jObj(InventoryItem.Manufacturer.NAME to "manufacturer1"),
+        InventoryItem.RELEASE_DATE to "2016-08-29T09:12:33.001Z",
+        InventoryItem.COUNT to 10
+    )
+
+    @BeforeEach
+    fun beforeEach() {
         runBlocking {
             dbAccess.getConnection { conn -> conn.preparedQueryAwait("TRUNCATE test.inventories") }
         }
     }
 
-    group("Inventory Controller Testing") {
-        describe("get all inventory objects") {
-            context("there is no data") {
-                val body = runBlocking {
-                    val response = webClient.get(8080, "localhost", "/api/inventory").sendAwait()
-                    response.bodyAsJsonArray()
-                }
-                it("Get should return an empty array") {
-                    body.isEmpty `should be` true
-                }
-            }
-        }
+    @Test
+    fun testInvalidPosts() = runBlocking {
+        var response = webClient.postAbs("$baseURL/api/inventory").sendJsonAwait(testItem)
+        assertAll("Need valid auth token",
+            { Assertions.assertEquals(HTTPStatusCode.UNAUTHORIZED.value(), response.statusCode()) }
+        )
 
-        describe("Test post") {
-            val testItem = jObj(
-                "name" to "widget",
-                "manufacturer" to jObj("name" to "manufacturer1" ),
-                "releaseDate" to "2016-08-29T09:12:33.001Z"
-            )
+        response = webClient.postAbs("$baseURL/api/inventory").setUserToken().sendJsonAwait(testItem)
+        assertAll("Authorized user but needs admin permissions",
+            { Assertions.assertEquals(HTTPStatusCode.UNAUTHORIZED.value(), response.statusCode()) }
+        )
 
-            context("Check permissions for non logged in user") {
-                val response = runBlocking {
-                    webClient.post(8080, "localhost", "/api/inventory").sendJsonAwait(testItem)
-                }
-                it("Post should fail because of missing token") {
-                    response.statusCode() `should be equal to` HTTPStatusCode.UNAUTHORIZED.value()
-                }
-            }
-
-            context("Validate required properties") {
-                val response = runBlocking {
-                    webClient.post(8080, "localhost", "/api/inventory").setUserToken(jwtHelper).sendJsonAwait(testItem)
-                }
-                it("Post should fail because body is missing properties") {
-                    response.statusCode() `should be equal to` HTTPStatusCode.BAD_REQUEST.value()
-                }
-            }
-
-            testItem.put("count", 10)
-
-            context("Check non admin permissions") {
-                val response = runBlocking {
-                    webClient.post(8080, "localhost", "/api/inventory").setUserToken(jwtHelper).sendJsonAwait(testItem)
-                }
-                it("Post should fail because user is not an admin") {
-                    response.statusCode() `should be equal to` HTTPStatusCode.UNAUTHORIZED.value()
-                }
-            }
-
-            context("Add some data") {
-                val response = runBlocking {
-                    webClient.post(8080, "localhost", "/api/inventory").setAdminToken(jwtHelper).sendJsonAwait(testItem)
-                }
-                it("Item should have been created") {
-                    response.statusCode() `should be equal to` HTTPStatusCode.OK.value()
-                    val body = response.bodyAsJsonObject()
-                    val id = body.getString("id")
-                    testItem.put("id", id)
-
-                    body `should equal` testItem
-                }
-            }
-        }
+        val badTestItem = testItem.copy().remove("name")
+        response = webClient.postAbs("$baseURL/api/inventory").setAdminToken().sendJsonAwait(badTestItem)
+        assertAll("Item missing required name",
+            { Assertions.assertEquals(HTTPStatusCode.BAD_REQUEST.value(), response.statusCode()) }
+        )
     }
-})
+
+    @Test
+    fun testInvalidPatches() = runBlocking {
+        val postResponse = webClient.postAbs("$baseURL/api/inventory").setAdminToken().sendJsonAwait(testItem).bodyAsJsonObject()
+        val id = postResponse.getString(InventoryItem.ID)
+
+        var response = webClient.patchAbs("$baseURL/api/inventory/$id")
+            .sendJsonAwait(jObj(InventoryItem.NAME to "anotherName"))
+        assertAll("Need valid auth token",
+            { Assertions.assertEquals(HTTPStatusCode.UNAUTHORIZED.value(), response.statusCode()) }
+        )
+
+        response = webClient.patchAbs("$baseURL/api/inventory/$id").setUserToken()
+            .sendJsonAwait(jObj(InventoryItem.NAME to "anotherName"))
+        assertAll("Authorized user but needs admin permissions",
+            { Assertions.assertEquals(HTTPStatusCode.UNAUTHORIZED.value(), response.statusCode()) }
+        )
+
+        response = webClient.patchAbs("$baseURL/api/inventory/$id").setAdminToken()
+            .sendJsonAwait(jObj(InventoryItem.COUNT to "A string, not a number"))
+        assertAll("Bad parameter type",
+            { Assertions.assertEquals(HTTPStatusCode.BAD_REQUEST.value(), response.statusCode()) }
+        )
+
+        response = webClient.patchAbs("$baseURL/api/inventory/123abc").setAdminToken()
+            .sendJsonAwait(jObj(InventoryItem.COUNT to 42))
+        assertAll("Patching ID that does not exist",
+            { Assertions.assertEquals(HTTPStatusCode.NOT_FOUND.value(), response.statusCode()) }
+        )
+    }
+
+    @Test
+    fun testInvalidDeletes() = runBlocking {
+        val postResponse = webClient.postAbs("$baseURL/api/inventory").setAdminToken().sendJsonAwait(testItem).bodyAsJsonObject()
+        val id = postResponse.getString(InventoryItem.ID)
+
+        var response = webClient.deleteAbs("$baseURL/api/inventory/123").sendAwait()
+        assertAll("Need valid auth token",
+            { Assertions.assertEquals(HTTPStatusCode.UNAUTHORIZED.value(), response.statusCode()) }
+        )
+
+        response = webClient.deleteAbs("$baseURL/api/inventory/$id").setUserToken().sendAwait()
+        assertAll("Authorized user but needs admin permissions",
+            { Assertions.assertEquals(HTTPStatusCode.UNAUTHORIZED.value(), response.statusCode()) }
+        )
+
+        response = webClient.deleteAbs("$baseURL/api/inventory/123abc").setAdminToken().sendAwait()
+        assertAll("Deleting ID that does not exist",
+            { Assertions.assertEquals(HTTPStatusCode.NOT_FOUND.value(), response.statusCode()) }
+        )
+    }
+
+    @Test
+    fun testHappyPaths() = runBlocking {
+        var getAllBody = webClient.getAbs("$baseURL/api/inventory").sendAwait().bodyAsJsonArray()
+        assertAll("body should be empty",
+            { Assertions.assertEquals(jArr(), getAllBody) }
+        )
+
+        var body = webClient.postAbs("$baseURL/api/inventory").setAdminToken().sendJsonAwait(testItem).bodyAsJsonObject()
+        val id = body.remove(InventoryItem.ID)
+        assertAll("Item should be stored and props should be equal to what we sent",
+            { Assertions.assertEquals(testItem, body) }
+        )
+
+        body = webClient.getAbs("$baseURL/api/inventory/$id").sendAwait().bodyAsJsonObject()
+        body.remove(InventoryItem.ID)
+        assertAll("Getting item from DB should be equal to what we sent",
+            { Assertions.assertEquals(testItem, body) }
+        )
+
+        getAllBody = webClient.getAbs("$baseURL/api/inventory").sendAwait().bodyAsJsonArray()
+        getAllBody.getJsonObject(0).remove(InventoryItem.ID)
+        assertAll("Getting all items from DB should be equal to what we sent",
+            { Assertions.assertEquals(1, getAllBody.size()) },
+            { Assertions.assertEquals(jArr(testItem), getAllBody) }
+        )
+
+        body = webClient.patchAbs("$baseURL/api/inventory/$id").setAdminToken()
+            .sendJsonAwait(jObj(InventoryItem.NAME to "Another Name")).bodyAsJsonObject()
+        assertAll("Patched item should have new name",
+            { Assertions.assertEquals("Another Name", body.getString(InventoryItem.NAME)) }
+        )
+
+        body = webClient.getAbs("$baseURL/api/inventory/$id").sendAwait().bodyAsJsonObject()
+        body.remove(InventoryItem.ID)
+        assertAll("Getting item from DB should have new name",
+            { Assertions.assertEquals("Another Name", body.getString(InventoryItem.NAME)) }
+        )
+
+        var response = webClient.deleteAbs("$baseURL/api/inventory/$id").setAdminToken().sendAwait()
+        assertAll("Deletion should return successfully",
+            { Assertions.assertEquals(HTTPStatusCode.OK.value(), response.statusCode()) }
+        )
+
+        response = webClient.getAbs("$baseURL/api/inventory/$id").sendAwait()
+        assertAll("Getting item from DB should have new name",
+            { Assertions.assertEquals(HTTPStatusCode.NOT_FOUND.value(), response.statusCode()) }
+        )
+    }
+
+}

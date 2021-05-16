@@ -1,4 +1,6 @@
 {
+  "ENVIRONMENT": "local",
+
   "SERVICE_DB_HOST": "localhost",
   "SERVICE_DB_PORT": 5432,
   "SERVICE_DB_NAME": "exampledb",

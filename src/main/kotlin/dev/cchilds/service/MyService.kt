@@ -2,43 +2,67 @@ package dev.cchilds.service
 
 import dev.cchilds.repositories.InventoryRepo
 import dev.cchilds.security.PubSecJWTManager
-import dev.cchilds.verticles.HttpVerticle
 import io.vertx.core.Vertx
+import io.vertx.core.http.HttpServerOptions
+import io.vertx.ext.web.Router
+import io.vertx.ext.web.handler.StaticHandler
 import io.vertx.kotlin.core.deployVerticleAwait
+import io.vertx.kotlin.coroutines.CoroutineVerticle
 import kotlinx.coroutines.runBlocking
 import me.koddle.config.Config
 import me.koddle.service.buildAutoModule
-import me.koddle.tools.DatabaseAccess
-import me.koddle.tools.RequestHelper
-import me.koddle.tools.VertxRequestHelper
+import me.koddle.tools.*
 import org.koin.core.context.startKoin
-import org.koin.core.module.Module
 import org.koin.dsl.module
 
 fun main() {
-    start()
+    runBlocking {
+        Vertx.vertx().deployVerticleAwait(MyService())
+    }
 }
 
-fun start(overrideModule: Module? = null) {
-    val vertx = Vertx.vertx()
-    val config = Config.config(vertx)
+class MyService : CoroutineVerticle() {
 
-    val module = module(override = true) {
-        single { vertx }
-        single { PubSecJWTManager(config, vertx) }
-        single<RequestHelper> { VertxRequestHelper(get()) }
-        single { DatabaseAccess(config, vertx) }
-        single { InventoryRepo("public") }
+    override suspend fun start() {
+        configureModules()
+
+        vertx.createHttpServer(HttpServerOptions().setCompressionSupported(true))
+            .requestHandler(configureRouter())
+            .listen(config.getInteger("http.port", 8080))
     }
-    startKoin {
-        modules(buildAutoModule(HttpVerticle::class.java))
-        modules(module)
-        overrideModule?.let {
-            modules(it)
+
+    private suspend fun configureModules() {
+        val config = Config.config(vertx)
+        val schema = if ("test" == config.getString("ENVIRONMENT")) "test" else "public"
+
+        val module = module(override = true) {
+            single { vertx }
+            single { PubSecJWTManager(config, vertx) }
+            single<RequestHelper> { VertxRequestHelper(get()) }
+            single { DatabaseAccess(config, vertx) }
+            single { InventoryRepo(schema) }
+        }
+        startKoin {
+            modules(buildAutoModule(MyService::class.java))
+            modules(module)
         }
     }
 
-    runBlocking {
-        vertx.deployVerticleAwait(HttpVerticle())
+    private suspend fun configureRouter(): Router {
+        val mainRouter = Router.router(vertx)
+        val pkg = this.javaClass.`package`.name.substringBeforeLast('.') + ".controllers"
+        val swaggerFile = SwaggerMerger.mergeAllInDirectory("swagger") ?: throw RuntimeException("Unable to process Swagger file")
+        val staticHandler = StaticHandler.create()
+            .setDirectoryListing(false)
+            .setIncludeHidden(false)
+
+        val apiRouter = Router.router(vertx)
+        val jwtManager = PubSecJWTManager(Config.config(vertx), vertx)
+        apiRouter.route(swaggerFile, pkg, SwaggerRouterOptions(authManager = jwtManager))
+        mainRouter.mountSubRouter("/api", apiRouter)
+
+        mainRouter.get().handler(staticHandler)
+        return mainRouter
     }
+
 }

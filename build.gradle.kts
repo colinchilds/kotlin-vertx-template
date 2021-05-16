@@ -20,7 +20,9 @@ plugins {
     application
 }
 
-val vertxVersion = "3.8.1"
+val kotlinVersion = "1.3.40"
+val vertxVersion = "3.8.4"
+val junitVersion = "5.3.2"
 
 dependencies {
     implementation(project(":Koddle"))
@@ -33,7 +35,6 @@ dependencies {
     implementation("io.vertx:vertx-web-api-contract:$vertxVersion")
     implementation("io.vertx:vertx-web-client:$vertxVersion")
     implementation("io.vertx:vertx-lang-kotlin-coroutines:$vertxVersion")
-    implementation("io.vertx:vertx-unit:$vertxVersion")
     implementation("io.vertx:vertx-lang-kotlin:$vertxVersion")
     implementation("io.vertx:vertx-pg-client:$vertxVersion")
     implementation("io.vertx:vertx-config:$vertxVersion")
@@ -44,9 +45,9 @@ dependencies {
     implementation("org.koin:koin-core-ext:2.0.1")
     implementation("org.slf4j:slf4j-jdk14:1.7.28")
 
-    testImplementation("org.spekframework.spek2:spek-dsl-jvm:2.0.7")
-    testRuntimeOnly("org.spekframework.spek2:spek-runner-junit5:2.0.7")
-    testImplementation("org.amshove.kluent:kluent:1.54")
+    testCompile("org.junit.jupiter:junit-jupiter-api:$junitVersion")
+    testCompile("org.junit.jupiter:junit-jupiter-params:$junitVersion")
+    runtime("org.junit.jupiter:junit-jupiter-engine:$junitVersion")
 }
 
 repositories {
@@ -65,9 +66,7 @@ tasks {
         kotlinOptions.jvmTarget = "1.8"
     }
     test {
-        useJUnitPlatform {
-            includeEngines("spek2")
-        }
+        useJUnitPlatform()
     }
     withType<ShadowJar> {
         baseName = "kvt"
