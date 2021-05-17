@@ -3,6 +3,7 @@ package dev.cchilds.service
 import dev.cchilds.repositories.InventoryRepo
 import dev.cchilds.security.PubSecJWTManager
 import io.vertx.core.Vertx
+import io.vertx.core.VertxOptions
 import io.vertx.core.http.HttpServerOptions
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.StaticHandler
@@ -17,8 +18,15 @@ import org.koin.dsl.module
 
 fun main() {
     runBlocking {
-        Vertx.vertx().deployVerticleAwait(MyService())
+        Vertx.vertx(getVertxOptions()).deployVerticleAwait(MyService())
     }
+}
+
+fun getVertxOptions(): VertxOptions {
+    val options = VertxOptions()
+    options.preferNativeTransport = true
+
+    return options
 }
 
 class MyService : CoroutineVerticle() {
@@ -26,9 +34,17 @@ class MyService : CoroutineVerticle() {
     override suspend fun start() {
         configureModules()
 
-        vertx.createHttpServer(HttpServerOptions().setCompressionSupported(true))
+        vertx.createHttpServer(getHttpOptions())
             .requestHandler(configureRouter())
             .listen(config.getInteger("http.port", 8080))
+        println("Using native transport: ${vertx.isNativeTransportEnabled}")
+    }
+
+    private fun getHttpOptions(): HttpServerOptions {
+        return HttpServerOptions().setCompressionSupported(true).setTcpFastOpen(true)
+            .setTcpCork(true)
+            .setTcpQuickAck(true)
+            .setReusePort(true)
     }
 
     private suspend fun configureModules() {

@@ -8,6 +8,7 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.client.HttpRequest
 import io.vertx.ext.web.client.WebClient
 import io.vertx.kotlin.core.deployVerticleAwait
+import io.vertx.kotlin.coroutines.await
 import kotlinx.coroutines.runBlocking
 import me.koddle.config.Config
 import me.koddle.json.jArr
@@ -36,7 +37,7 @@ open class BaseControllerTest {
             config = Config.config(vertx)
             authManager = PubSecJWTManager(config, vertx)
             dbAccess = DatabaseAccess(config, vertx)
-            vertx.deployVerticleAwait(MyService())
+            vertx.deployVerticle(MyService()).await()
         }
     }
 
