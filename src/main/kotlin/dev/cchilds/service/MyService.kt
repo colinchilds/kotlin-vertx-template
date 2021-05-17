@@ -9,6 +9,7 @@ import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.StaticHandler
 import io.vertx.kotlin.core.deployVerticleAwait
 import io.vertx.kotlin.coroutines.CoroutineVerticle
+import io.vertx.kotlin.coroutines.await
 import kotlinx.coroutines.runBlocking
 import me.koddle.config.Config
 import me.koddle.service.buildAutoModule
@@ -18,7 +19,7 @@ import org.koin.dsl.module
 
 fun main() {
     runBlocking {
-        Vertx.vertx(getVertxOptions()).deployVerticleAwait(MyService())
+        Vertx.vertx(getVertxOptions()).deployVerticle(MyService()).await()
     }
 }
 
@@ -41,7 +42,9 @@ class MyService : CoroutineVerticle() {
     }
 
     private fun getHttpOptions(): HttpServerOptions {
-        return HttpServerOptions().setCompressionSupported(true).setTcpFastOpen(true)
+        return HttpServerOptions()
+            .setCompressionSupported(true)
+            .setTcpFastOpen(true)
             .setTcpCork(true)
             .setTcpQuickAck(true)
             .setReusePort(true)
