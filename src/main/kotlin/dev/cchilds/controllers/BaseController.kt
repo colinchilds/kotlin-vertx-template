@@ -14,9 +14,5 @@ open class BaseController : KoinComponent {
     protected val da: DatabaseAccess = get()
     protected val vertx: Vertx = get()
     protected val config: JsonObject = get(named("config"))
-    protected var webClient: WebClient
-
-    constructor() {
-        webClient = WebClient.create(vertx);
-    }
+    protected var webClient: WebClient = WebClient.create(vertx)
 }

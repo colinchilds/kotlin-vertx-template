@@ -16,8 +16,8 @@ Next, make sure the DB connection options are configured correctly in `config.js
 Run `Migration.kt` and it should complete successfully. Run `MyService.kt` and hit `localhost:8080`. You should see
 a basic React frontend. Using cURL or Postman make a request to `localhost:8080/api/inventory` and you should get back an empty list.
 
-## Swagger
-Take a look at the two provided Swagger files (`inventory.yaml` and `login.yaml`) to know which endpoints you can hit and what their expected inputs are. For example,
+## OpenAPI
+Take a look at the two provided OpenAPI files (`inventory.yaml` and `login.yaml`) to know which endpoints you can hit and what their expected inputs are. For example,
 when creating a new inventory item, you can post the following body:
 ```json
 {

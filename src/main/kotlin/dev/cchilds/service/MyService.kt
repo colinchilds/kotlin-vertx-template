@@ -1,6 +1,5 @@
 package dev.cchilds.service
 
-import dev.cchilds.repositories.InventoryRepo
 import dev.cchilds.security.PubSecJWTManager
 import io.vertx.core.Vertx
 import io.vertx.core.VertxOptions
@@ -73,13 +72,13 @@ class MyService : CoroutineVerticle() {
 
     private fun configureRouter(pkg: String, jwtManager: PubSecJWTManager): Router {
         val mainRouter = Router.router(vertx)
-        val swaggerFile = SwaggerMerger.mergeAllInDirectory("swagger") ?: throw RuntimeException("Unable to process Swagger file")
+        val openAPIFile = OpenAPIMerger.mergeAllInDirectory("swagger") ?: throw RuntimeException("Unable to process Swagger file")
         val staticHandler = StaticHandler.create()
             .setDirectoryListing(false)
             .setIncludeHidden(false)
 
         val apiRouter = Router.router(vertx)
-        apiRouter.route(swaggerFile, "$pkg.controllers", SwaggerRouterOptions(authManager = jwtManager))
+        apiRouter.route(openAPIFile, "$pkg.controllers", OpenAPIRouterOptions(authManager = jwtManager))
         mainRouter.mountSubRouter("/api", apiRouter)
 
         mainRouter.get().handler(staticHandler)
