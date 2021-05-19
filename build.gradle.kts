@@ -1,5 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-import com.moowork.gradle.node.npm.NpmTask
+import com.github.gradle.node.npm.task.NpmTask
 
 application {
     mainClassName = "dev.cchilds.service.MyServiceKt"
@@ -13,10 +13,8 @@ buildscript {
 
 plugins {
     kotlin("jvm") version "1.5.0"
-    id("com.moowork.node") version "1.3.1"
+    id("com.github.node-gradle.node") version "3.1.0"
     id("com.github.johnrengelman.shadow") version "5.1.0"
-//    id("com.palantir.docker") version "0.22.1"
-//    id("com.palantir.docker-run") version "0.22.1"
     application
 }
 
@@ -61,16 +59,10 @@ dependencies {
             implementation("io.netty:netty-transport-native-kqueue:$nettyVersion:osx-x86_64")
             implementation("io.netty:netty-resolver-dns-native-macos:$nettyVersion:osx-x86_64")
         } else {
-            println(
-                "No Netty native transport available for OS \"${currentOS.name}\". Netty will fall back to using the " +
-                        "NIO transport."
-            )
+            println("No Netty native transport available for OS \"${currentOS.name}\".")
         }
     } else {
-        println(
-            "No Netty native transport available for architecture \"${currentArch.name}\". Netty will fall back " +
-                    "to using the NIO transport."
-        )
+        println("No Netty native transport available for architecture \"${currentArch.name}\".")
     }
 }
 
@@ -100,23 +92,14 @@ tasks {
 }
 
 node {
-    version = "10.16.3"
-    npmVersion = "6.9.0"
-    download = true
-    nodeModulesDir = File("src/main/frontend")
+    version.set("16.1.0")
+    download.set(true)
+    nodeProjectDir.set(File("src/main/frontend"))
 }
 
-val buildFrontend by tasks.creating(NpmTask::class) {
-    setArgs(listOf("run", "build"))
-    dependsOn("npmInstall")
-}
-
-val copyToWebRoot by tasks.creating(Copy::class) {
-    from("src/main/frontend/build")
-    destinationDir = File("src/main/resources/webroot")
-    dependsOn(buildFrontend)
-}
-
-val processResources by tasks.getting(ProcessResources::class) {
-    dependsOn(copyToWebRoot)
+val buildTaskUsingNpm = tasks.register<NpmTask>("buildNpm") {
+    npmCommand.set(listOf("run", "build"))
+    args.set(listOf("--", "--out-dir", "src/main/resources/webroot"))
+    inputs.dir("src/main/frontend")
+    outputs.dir("src/main/resources/webroot")
 }

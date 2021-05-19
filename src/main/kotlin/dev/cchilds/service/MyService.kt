@@ -73,15 +73,16 @@ class MyService : CoroutineVerticle() {
     private fun configureRouter(pkg: String, jwtManager: PubSecJWTManager): Router {
         val mainRouter = Router.router(vertx)
         val openAPIFile = OpenAPIMerger.mergeAllInDirectory("swagger") ?: throw RuntimeException("Unable to process Swagger file")
-        val staticHandler = StaticHandler.create()
-            .setDirectoryListing(false)
-            .setIncludeHidden(false)
 
         val apiRouter = Router.router(vertx)
         apiRouter.route(openAPIFile, "$pkg.controllers", OpenAPIRouterOptions(authManager = jwtManager))
         mainRouter.mountSubRouter("/api", apiRouter)
 
+        val staticHandler = StaticHandler.create()
+            .setDirectoryListing(false)
+            .setIncludeHidden(false)
         mainRouter.get().handler(staticHandler)
+
         return mainRouter
     }
 
