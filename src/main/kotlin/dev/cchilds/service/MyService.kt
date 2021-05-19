@@ -5,16 +5,17 @@ import dev.cchilds.security.PubSecJWTManager
 import io.vertx.core.Vertx
 import io.vertx.core.VertxOptions
 import io.vertx.core.http.HttpServerOptions
+import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.StaticHandler
-import io.vertx.kotlin.core.deployVerticleAwait
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.kotlin.coroutines.await
 import kotlinx.coroutines.runBlocking
 import me.koddle.config.Config
-import me.koddle.service.buildAutoModule
+import me.koddle.koin.buildModulesForPackage
 import me.koddle.tools.*
 import org.koin.core.context.startKoin
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 fun main() {
@@ -33,10 +34,14 @@ fun getVertxOptions(): VertxOptions {
 class MyService : CoroutineVerticle() {
 
     override suspend fun start() {
-        configureModules()
+        val config = Config.config(vertx)
+        val jwtManager = PubSecJWTManager(config, vertx)
+        val pkg = this.javaClass.`package`.name.substringBeforeLast('.')
+
+        configureModules(pkg, config, jwtManager)
 
         vertx.createHttpServer(getHttpOptions())
-            .requestHandler(configureRouter())
+            .requestHandler(configureRouter(pkg, jwtManager))
             .listen(config.getInteger("http.port", 8080))
         println("Using native transport: ${vertx.isNativeTransportEnabled}")
     }
@@ -50,34 +55,31 @@ class MyService : CoroutineVerticle() {
             .setReusePort(true)
     }
 
-    private suspend fun configureModules() {
-        val config = Config.config(vertx)
+    private fun configureModules(pkg: String, config: JsonObject, jwtManager: PubSecJWTManager) {
         val schema = if ("test" == config.getString("ENVIRONMENT")) "test" else "public"
 
         val module = module(override = true) {
             single { vertx }
-            single { PubSecJWTManager(config, vertx) }
-            single<RequestHelper> { VertxRequestHelper(get()) }
-            single { DatabaseAccess(config, vertx) }
-            single { InventoryRepo(schema) }
+            single(named("config")) { config }
+            single { jwtManager }
+            single { VertxRequestHelper(get()) }
+            single { DatabaseAccess(get(named("config")), get(), schema) }
         }
         startKoin {
-            modules(buildAutoModule(MyService::class.java))
+            modules(buildModulesForPackage("$pkg"))
             modules(module)
         }
     }
 
-    private suspend fun configureRouter(): Router {
+    private fun configureRouter(pkg: String, jwtManager: PubSecJWTManager): Router {
         val mainRouter = Router.router(vertx)
-        val pkg = this.javaClass.`package`.name.substringBeforeLast('.') + ".controllers"
         val swaggerFile = SwaggerMerger.mergeAllInDirectory("swagger") ?: throw RuntimeException("Unable to process Swagger file")
         val staticHandler = StaticHandler.create()
             .setDirectoryListing(false)
             .setIncludeHidden(false)
 
         val apiRouter = Router.router(vertx)
-        val jwtManager = PubSecJWTManager(Config.config(vertx), vertx)
-        apiRouter.route(swaggerFile, pkg, SwaggerRouterOptions(authManager = jwtManager))
+        apiRouter.route(swaggerFile, "$pkg.controllers", SwaggerRouterOptions(authManager = jwtManager))
         mainRouter.mountSubRouter("/api", apiRouter)
 
         mainRouter.get().handler(staticHandler)

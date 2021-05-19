@@ -29,19 +29,17 @@ dependencies {
     implementation(project(":Koddle"))
 
     implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
-    implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
 
     implementation("io.vertx:vertx-core:$vertxVersion")
     implementation("io.vertx:vertx-web:$vertxVersion")
-    implementation("io.vertx:vertx-web-api-contract:$vertxVersion")
     implementation("io.vertx:vertx-web-client:$vertxVersion")
     implementation("io.vertx:vertx-lang-kotlin-coroutines:$vertxVersion")
     implementation("io.vertx:vertx-lang-kotlin:$vertxVersion")
     implementation("io.vertx:vertx-pg-client:$vertxVersion")
-    implementation("io.vertx:vertx-config:$vertxVersion")
     implementation("io.vertx:vertx-auth-jwt:$vertxVersion")
 
-    implementation("postgresql:postgresql:9.1-901-1.jdbc4")
+    implementation("org.flywaydb:flyway-core:6.0.0")
+    implementation("org.postgresql:postgresql:42.2.20")
     implementation("org.koin:koin-core:2.0.1")
     implementation("org.koin:koin-core-ext:2.0.1")
     implementation("org.slf4j:slf4j-jdk14:1.7.28")

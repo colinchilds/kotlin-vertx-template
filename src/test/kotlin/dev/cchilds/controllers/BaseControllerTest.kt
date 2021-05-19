@@ -36,7 +36,7 @@ open class BaseControllerTest {
         runBlocking {
             config = Config.config(vertx)
             authManager = PubSecJWTManager(config, vertx)
-            dbAccess = DatabaseAccess(config, vertx)
+            dbAccess = DatabaseAccess(config, vertx, "test")
             vertx.deployVerticle(MyService()).await()
         }
     }
