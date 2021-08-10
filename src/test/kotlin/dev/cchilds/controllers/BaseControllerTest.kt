@@ -7,7 +7,6 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.client.HttpRequest
 import io.vertx.ext.web.client.WebClient
-import io.vertx.kotlin.core.deployVerticleAwait
 import io.vertx.kotlin.coroutines.await
 import kotlinx.coroutines.runBlocking
 import me.koddle.config.Config

@@ -5,8 +5,8 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.client.WebClient
 import me.koddle.tools.DatabaseAccess
 import me.koddle.tools.VertxRequestHelper
-import org.koin.core.KoinComponent
-import org.koin.core.get
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
 import org.koin.core.qualifier.named
 
 open class BaseController : KoinComponent {

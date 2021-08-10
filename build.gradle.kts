@@ -19,8 +19,8 @@ plugins {
 }
 
 val kotlinVersion = "1.5.0"
-val vertxVersion = "4.0.3"
-val nettyVersion = "4.1.60.Final" //Must update this as vertx does to get native transports
+val vertxVersion = "4.1.2"
+val nettyVersion = "4.1.65.Final" //Must update this as vertx does to get native transports
 val junitVersion = "5.3.2"
 
 dependencies {
@@ -40,8 +40,7 @@ dependencies {
 
     implementation("org.flywaydb:flyway-core:6.0.0")
     implementation("org.postgresql:postgresql:42.2.20")
-    implementation("org.koin:koin-core:2.0.1")
-    implementation("org.koin:koin-core-ext:2.0.1")
+    implementation("io.insert-koin:koin-core:3.1.2")
     implementation("org.slf4j:slf4j-jdk14:1.7.28")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitVersion")

@@ -1,5 +1,8 @@
 package dev.cchilds.service
 
+import dev.cchilds.controllers.InventoryController
+import dev.cchilds.controllers.LoginController
+import dev.cchilds.repositories.InventoryRepo
 import dev.cchilds.security.PubSecJWTManager
 import io.vertx.core.Vertx
 import io.vertx.core.VertxOptions
@@ -11,8 +14,8 @@ import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.kotlin.coroutines.await
 import kotlinx.coroutines.runBlocking
 import me.koddle.config.Config
-import me.koddle.koin.buildModulesForPackage
 import me.koddle.tools.*
+import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -63,9 +66,15 @@ class MyService : CoroutineVerticle() {
             single { jwtManager }
             single { VertxRequestHelper(get()) }
             single { DatabaseAccess(get(named("config")), get(), schema) }
+
+            // Repository
+            single { InventoryRepo(get()) }
+
+            // Controllers
+            single { InventoryController(get()) }
+            single { LoginController(get()) }
         }
         startKoin {
-            modules(buildModulesForPackage("$pkg"))
             modules(module)
         }
     }
@@ -75,7 +84,7 @@ class MyService : CoroutineVerticle() {
         val openAPIFile = OpenAPIMerger.mergeAllInDirectory("swagger") ?: throw RuntimeException("Unable to process Swagger file")
 
         val apiRouter = Router.router(vertx)
-        apiRouter.route(openAPIFile, "$pkg.controllers", OpenAPIRouterOptions(authManager = jwtManager))
+        apiRouter.route(openAPIFile, controllerInstanceLookup(pkg), OpenAPIRouterOptions(authManager = jwtManager))
         mainRouter.mountSubRouter("/api", apiRouter)
 
         val staticHandler = StaticHandler.create()
@@ -84,6 +93,15 @@ class MyService : CoroutineVerticle() {
         mainRouter.get().handler(staticHandler)
 
         return mainRouter
+    }
+
+    private fun controllerInstanceLookup(pkg: String): (String) -> Any? {
+        return { controllerName: String ->
+            val kclass = Class
+                .forName("$pkg.controllers.$controllerName")
+                .kotlin
+            GlobalContext.get().get<Any>(kclass, null, null)
+        }
     }
 
 }
